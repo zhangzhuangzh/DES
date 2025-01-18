@@ -110,39 +110,55 @@ package apb_agent_pkg;
 
     // Agent: The top class that connects generator, driver and monitor
     class apb_agent;
-        
-        // BUILD
-        //=============================================================
-        mailbox #(apb_trans)    gen2drv;
-        apb_generator           apb_generator;
-        apb_driver              apb_driver;
 
-        function new();
-            this.gen2drv = new();
-            this.apb_generator = new(this.gen2drv);
-            this.apb_driver = new(this.gen2drv);
-        endfunction //new()
+    // BUILD
+    //=============================================================
+    mailbox #(apb_trans)    gen2drv;
+    mailbox #(apb_trans)    drv2mon;
+    apb_generator           apb_generator;
+    apb_driver              apb_driver;
+    apb_monitor             apb_monitor;
+    apb_scoreboard          apb_scoreboard;
+    apb_golden_model        apb_golden_model;
 
-        // CONNECT
-        //=============================================================
-        function void set_intf(
-            virtual apb_bus apb
-        );   
-            // connect to apb_driver
-            this.apb_driver.set_intf(apb);
-        endfunction //automatic
+    function new();
+        this.gen2drv = new();
+        this.drv2mon = new();
+        this.apb_generator = new(this.gen2drv);
+        this.apb_driver = new(this.gen2drv);
+        this.apb_monitor = new(this.drv2mon);
+        this.apb_scoreboard = new();
+        this.apb_golden_model = new();
+    endfunction //new()
 
-        // FUN : single data tran
-        //=============================================================
-        task automatic single_tran(
-            input [31:0]    rdata = 32'h2000_0000
-        );
-            // generate data
-            this.apb_generator.data_gen(rdata);
+    // CONNECT
+    //=============================================================
+    function void set_intf(
+        virtual apb_bus apb
+    );
+        // connect to apb_driver
+        this.apb_driver.set_intf(apb);
+        this.apb_monitor.set_intf(apb);
+    endfunction //automatic
 
-            // drive data
-            this.apb_driver.data_trans();
-                
-        endtask //automatic
-    endclass //apb_agent
+    // FUN : single data tran
+    //=============================================================
+    task automatic single_tran(
+        input [31:0]    rdata = 32'h2000_0000
+    );
+        // generate data
+        this.apb_generator.data_gen(rdata);
+
+        // drive data
+        this.apb_driver.data_trans();
+
+        // collect data
+        this.apb_monitor.collect_data();
+
+        // compare data
+        apb_trans actual = new();
+        apb_trans expected = this.apb_golden_model.get_expected(actual);
+        this.apb_scoreboard.compare_data(actual, expected);
+    endtask //automatic
+endclass // apb_agent
 endpackage

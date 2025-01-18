@@ -127,44 +127,60 @@ package icb_agent_pkg;
 
     // Agent: The top class that connects generator, driver and monitor
     class icb_agent;
-        
-        // BUILD
-        //=============================================================
-        mailbox #(icb_trans)    gen2drv;
-        icb_generator           icb_generator;
-        icb_driver              icb_driver;
 
-        function new();
-            this.gen2drv = new(1);
-            this.icb_generator = new(this.gen2drv);
-            this.icb_driver = new(this.gen2drv);
-        endfunction //new()
+    // BUILD
+    //=============================================================
+    mailbox #(icb_trans)    gen2drv;
+    mailbox #(icb_trans)    drv2mon;
+    icb_generator           icb_generator;
+    icb_driver              icb_driver;
+    icb_monitor             icb_monitor;
+    icb_scoreboard          icb_scoreboard;
+    icb_golden_model        icb_golden_model;
 
-        // CONNECT
-        //=============================================================
-        function void set_intf(
-            virtual icb_bus icb
-        );   
-            // connect to icb_driver
-            this.icb_driver.set_intf(icb);
-        endfunction //automatic
+    function new();
+        this.gen2drv = new();
+        this.drv2mon = new();
+        this.icb_generator = new(this.gen2drv);
+        this.icb_driver = new(this.gen2drv);
+        this.icb_monitor = new(this.drv2mon);
+        this.icb_scoreboard = new();
+        this.icb_golden_model = new();
+    endfunction //new()
 
-        // FUN : single data tran
-        //=============================================================
-        task automatic single_tran(
-            input           read = 1'b1,
-            input [7:0]     mask = 8'h00,
-            input [63:0]    data = 64'h0000_0000_0000_0000,
-            input [31:0]    addr = 32'h2000_0000
-        );
-            // generate data
-            this.icb_generator.data_gen(read, mask, data, addr);
+    // CONNECT
+    //=============================================================
+    function void set_intf(
+        virtual icb_bus icb
+    );
+        // connect to icb_driver
+        this.icb_driver.set_intf(icb);
+        this.icb_monitor.set_intf(icb);
+    endfunction //automatic
 
-            // drive data
-            this.icb_driver.data_trans();
-                
-        endtask //automatic
-    endclass //icb_agent
+    // FUN : single data tran
+    //=============================================================
+    task automatic single_tran(
+        input           read = 1'b1,
+        input [7:0]     mask = 8'h00,
+        input [63:0]    data = 64'h0000_0000_0000_0000,
+        input [31:0]    addr = 32'h2000_0000
+    );
+        // generate data
+        this.icb_generator.data_gen(read, mask, data, addr);
+
+        // drive data
+        this.icb_driver.data_trans();
+
+        // collect data
+        this.icb_monitor.collect_data();
+
+        // compare data
+        icb_trans actual = new();
+        icb_trans expected = this.icb_golden_model.get_expected(actual);
+        this.icb_scoreboard.compare_data(actual, expected);
+    endtask //automatic
+endclass // icb_agent
 endpackage
 
 
